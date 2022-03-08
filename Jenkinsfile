@@ -19,16 +19,18 @@ pipeline {
     }
 
     stages {
-        when {
-            expression {
-              // Only when the latest commit messages is like vX.Y.Z
-              // and the branch is declared in RELEASE_BRANCH_NAMES
-              LAST_COMMIT_MESSAGE = sh(
-                script: 'git log --format=%B -n 1',
-                returnStdout: true
-              ).trim()
-              return RELEASE_BRANCH_NAMES.contains(BRANCH_NAME) && LAST_COMMIT_MESSAGE ==~ /v\d+\.\d+\.\d+$/
-            }
+        stage('Prod stages') {
+          when {
+              expression {
+                // Only when the latest commit messages is like vX.Y.Z
+                // and the branch is declared in RELEASE_BRANCH_NAMES
+                LAST_COMMIT_MESSAGE = sh(
+                  script: 'git log --format=%B -n 1',
+                  returnStdout: true
+                ).trim()
+                return RELEASE_BRANCH_NAMES.contains(BRANCH_NAME) && LAST_COMMIT_MESSAGE ==~ /v\d+\.\d+\.\d+$/
+              }
+          }
         }
 
         stage('Build toucantoco/clair-scanner prod') {
