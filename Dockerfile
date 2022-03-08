@@ -1,9 +1,8 @@
 FROM alpine:3.15.0
 
-COPY ./docker_configs/entrypoint.sh /bin/entrypoint.sh
 COPY ./clair-scanner /clair-scanner
 
-RUN apk update && apk add \
+RUN apk update && apk add --no-cache \
     curl \
     zip \
     alpine-sdk \
@@ -11,8 +10,7 @@ RUN apk update && apk add \
     git\
     mercurial \
     breezy \
-    go \
-    && rm -rf /var/cache/apk/*
+    go 
 
 ENV GOVERSION 1.17.4
 RUN mkdir /goroot && mkdir /gopath
@@ -30,3 +28,4 @@ RUN mv clair-scanner/clair-scanner /bin/ && \
     cd && \
     rm -rf clair-scanner
 
+COPY ./docker_configs/entrypoint.sh /bin/entrypoint.sh
