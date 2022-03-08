@@ -1,49 +1,50 @@
-.DEFAULT_GOAL := help
+.PHONY : install ensure build docker rmdocker test integration integrationlinux
 
-SHELL = /bin/bash
+install:	
+	go get -u golang.org/x/tools/cmd/cover
+	go get -u github.com/mattn/goveralls
 
-CLAIR_IMAGE        = toucantoco/clair-scanner
-CLAIR_VERSION_FILE = version.txt
-CLAIR_VERSION      = v`cat $(CLAIR_VERSION_FILE)`
-QUAYIO_IMAGE       = $(CLAIR_IMAGE)
-QUAYIO_REGISTRY    = quay.io
+build:
+	CGO_ENABLED=0 go build
 
-##
-## Misc commands
-## -----
-##
+installLocal:
+	CGO_ENABLED=0 go install
 
-list: ## Generate basic list of all targets
-	@grep '^[^\.#[:space:]].*:' Makefile | \
-		grep -v "=" | \
-		cut -d':' -f1
+docker:
+	@cd docker && \
+		docker build -t golang-cross-compile .
 
-help: ## Makefile help
-	@grep -E '(^[a-zA-Z_-]+:.*?##.*$$)|(^##)' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[32m%-30s\033[0m %s\n", $$1, $$2}' | \
-		sed -e 's/\[32m##/[33m/'
+cross: docker
+	docker run -ti --rm -e CGO_ENABLED=0 -v $(CURDIR):/gopath/src/clair-scanner -w /gopath/src/clair-scanner golang-cross-compile gox -osarch="darwin/amd64 darwin/386 linux/amd64 linux/386 windows/amd64 windows/386" -output "dist/{{.Dir}}_{{.OS}}_{{.Arch}}"
 
-get-version: ## Display current clair-scanner version
-	@echo $(CLAIR_VERSION)
+clean:
+	rm -rf dist
 
-set-version: ## Set NEW_VERSION as the new clair-scanner version
-	@if [ -z "$(NEW_VERSION)" ]; then \
-		echo "Usage: make set-version NEW_VERSION=X.Y.Z" && \
-		exit 1; \
-	fi
-	@echo "$(NEW_VERSION)" | sed -e "s/^v//g" > $(CLAIR_VERSION_FILE)
+rmdocker:
+	-docker kill clair
+	-docker kill db
+	-docker rm clair
+	-docker rm db
 
+test:
+	go test
 
-##
-## Docker images commands
-## -----
-##
+pull:
+	docker pull alpine:3.5
+	docker pull debian:jessie
 
-docker-build-prod:  ## Build the prod image
-	docker build --tag ${CLAIR_IMAGE}:${CLAIR_VERSION} .
+db:
+	docker run -p 5432:5432 -d --name db arminc/clair-db:latest
+	@sleep 5
 
-push-to-registry:  ## Push production image to dockerhub
-	for tag in ${CLAIR_VERSION} ${CLAIR_IMAGE_MORE_TAGS}; do \
-		docker tag ${CLAIR_IMAGE}:${CLAIR_VERSION} ${QUAYIO_REGISTRY}/${QUAYIO_IMAGE}:$${tag} && \
-		docker push ${QUAYIO_REGISTRY}/${QUAYIO_IMAGE}:$${tag}; \
-	done
+clair:
+	docker run -p 6060:6060 --link db:postgres -d --name clair arminc/clair-local-scan:latest
+	@sleep 5
+
+integration: pull db clair
+	go test -v -covermode=count -coverprofile=coverage.out -ip $(shell ipconfig getifaddr en0) -tags integration
+
+integrationlinux: pull db clair
+	go test -v -covermode=count -coverprofile=coverage.out -ip $(shell ifconfig docker0 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1) -tags integration
+
+release: integrationlinux build cross

@@ -1,6 +1,6 @@
 FROM alpine:3.15.0
 
-COPY ./clair-scanner /clair-scanner
+COPY . /clair-scanner
 
 RUN apk update && apk add --no-cache \
     curl \
@@ -23,9 +23,8 @@ ENV PATH $GOROOT/bin:$GOPATH/bin:$PATH
 
 RUN go get github.com/mitchellh/gox
 
-RUN cd clair-scanner && make build
+RUN mv /clair-scanner/docker_configs/entrypoint.sh /bin/entrypoint.sh
+RUN cd clair-scanner && make -f Makefile build
 RUN mv clair-scanner/clair-scanner /bin/ && \
     cd && \
     rm -rf clair-scanner
-
-COPY ./docker_configs/entrypoint.sh /bin/entrypoint.sh
